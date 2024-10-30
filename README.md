@@ -2,7 +2,7 @@
 
 This is a temporary repo for the demo codes
 
-## Currently include implements for :
+## Currently include implements
 llama3-8B-Chinese-Chat, Qwen2-7B-Instruct and glm-4-9b-chat (require copy special tweaks,see notebook)
 
 
