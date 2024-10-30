@@ -119,10 +119,8 @@ def input_reviced_attention(start,end,mode ='max'):
     index_tokens = [ tokenizer.decode(t,skip_special_tokens=False) for t in generated_ids[0][0][s:t]]
     seq_len = len(index_tokens)
     for layer in attention_input:
-        #按列求和，计算每个token作为被关注对象的总注意力分数
         total_attention_as_object = torch.sum(layer, axis=0).tolist()
         total_attention_as_object = [att/seq_len for att in total_attention_as_object]
-        #按行求和，计算每个token施加给其他token的总注意力分数
         #total_attention_as_attender = torch.sum(layer, axis=1).tolist()
         #total_attention_as_attender = [att/seq_len for att in total_attention_as_attender]
         reviced_attention.append(total_attention_as_object)
@@ -130,11 +128,11 @@ def input_reviced_attention(start,end,mode ='max'):
     return reviced_attention
 def input_reviced_attention_rollout(reviced_attention,output_mode = 'lastlayer'):
     reviced_attention_tensor = [np.array(layer) for layer in reviced_attention]
-    #残差连接
+
     bias_vector = np.ones(reviced_attention_tensor[0].shape[0])
     bias_vector = bias_vector[None, :]
     reviced_attention_tensor = np.array(reviced_attention_tensor) + bias_vector
-    #RMSNorm归一化
+
     reviced_attention_tensor = rmsnorm(torch.tensor(reviced_attention_tensor)).numpy()   
     layers = reviced_attention_tensor.shape[0]
     joint_attention = np.zeros(reviced_attention_tensor.shape)
@@ -151,12 +149,6 @@ def input_reviced_attention_rollout(reviced_attention,output_mode = 'lastlayer')
         raise ValueError("Invalid output mode. Please select from 'lastlayer', 'maxpooling', or 'meanpooling'.")
 
 def rmsnorm(x, eps=1e-6):
-    """
-    手动实现RMSNorm归一化操作
-    :param x: 输入张量
-    :param eps: 防止除零的小常数
-    :return: 归一化后的张量
-    """
     rms = torch.sqrt(torch.mean(x ** 2, dim=-1, keepdim=True) + eps)
     return x / rms
 
@@ -205,7 +197,7 @@ OOM = []
 device = 'cuda' 
 for samples,sample_type in zip([positive_samples,negative_samples],['positive','negative']):
     OOM_path = os.path.join(result_path,f'{sample_type}_OOM.json')
-    for prompt_tag in ['OR2-REV','OR2']: #,'OR3-REV',]:#'RET','RET-REV']:
+    for prompt_tag in ['OR2']:
         mode = 0 if 'OR' in prompt_tag else 1
         c = 1
         output_reuslt_path = os.path.join(
@@ -372,7 +364,7 @@ for samples,sample_type in zip([positive_samples,negative_samples],['positive','
             index_tokens = [ tokenizer.decode(t,skip_special_tokens=False) for t in generated_ids[0][0][s:t]]
             seq_len = len(index_tokens)
             for layer in attention_input:
-                #按列求和，计算每个token作为被关注对象的总注意力分数
+                
                 total_attention_as_object = torch.sum(layer, axis=0).tolist()
                 total_attention_as_object = [att/seq_len for att in total_attention_as_object]
                 reviced_attention.append(total_attention_as_object)
@@ -385,57 +377,55 @@ for samples,sample_type in zip([positive_samples,negative_samples],['positive','
             joint_attention = np.zeros(reviced_attention_tensor.shape)
             joint_attention[0] = reviced_attention_tensor[0]
             for i in np.arange(1, layers):
-                joint_attention[i] = reviced_attention_tensor[i] * joint_attention[i-1]  #逐元素相乘,因为原文中的公式是用于计算注意力方阵的[seq_len,seq_len]，但是这里用于计算注意力向量[1,seq_len]，所以需要逐元素相乘
+                joint_attention[i] = reviced_attention_tensor[i] * joint_attention[i-1] 
             self_joint_attention = joint_attention
 
-            # 假设 attentions_step1 是第 1 步的注意力张量，长度为 28 的 tuple
+            
             attentions_step1 = generated_ids['attentions'][0]
-            # 创建一个列表用于存储每一层的最后一个 token 的注意力
+            
             last_token_attention_list = []
             assert generated_ids[0][0][input_end:input_end+1] == tokenizer.eos_token_id
-            # 遍历 tuple 中的每一层注意力矩阵
+            
             for layer_attention in attentions_step1:
-                # 选择输出最后一个 token （ <|im_end|>）的注意力，并添加到列表中
+                
                 last_token_attention = layer_attention[:, :, input_end:input_end+1:, :]
                 last_token_attention_list.append(last_token_attention)
-            # 将 generated_ids['attentions'] 转换为列表
+            
             attentions_list = list(generated_ids['attentions'])
-            # 将生成步骤 0 对应的 tuple 替换为新的 tuple
+           
             attentions_list[0] = tuple(last_token_attention_list)
-            # 将列表转换回 tuple 并赋值回 generated_ids['attentions']
+            
             generated_ids['attentions'] = tuple(attentions_list)
 
             converted_attentions = []
 
-            # 假设模型有28层和28个注意力头，steps 是生成的token数
+           
             num_layers = generated_ids['attentions'][0][0].shape[1]  # 28
             num_heads = generated_ids['attentions'][0][0].shape[1] # 28
-            num_steps = len(generated_ids['attentions'])  # 生成的token数
+            num_steps = len(generated_ids['attentions'])  
 
-            # 初始化 last_tokens_attention 张量，用于存储每一步对之前一步的注意力
+            
             #last_tokens_attention = torch.zeros((num_layers, num_heads, num_steps))
             last_tokens_attention = []
             assert generated_ids[0][0][input_end:input_end+1] == tokenizer.eos_token_id
-            # 逐步遍历生成的 token
+            
 
             for i in range(num_steps):
-                # 将每个生成步骤中的 28 层 [batch_size=1, attention_head=28, seq_len=输入长度或者1, seq_len=输入长度或者输入长度+生成步数] 张量拼接成一个 [layer=28, attention_head=28, seq_len=输入长度或者1, seq_len=输入长度或者输入长度+生成步数] 的张量
                 step_attentions = torch.cat([layer for layer in generated_ids['attentions'][i]], dim=0)
                 last_token_attention = step_attentions[:, :, -1, -2]
-                # 保留从start_index到end_index之间的内容
                 if step_attentions.shape[-1] > input_start:
                     step_attentions = step_attentions[:, :, :, input_start:input_end]
                 
-                # 存储转换后的注意力张量
+            
                 converted_attentions.append(step_attentions.detach().clone().cpu().to(torch.float32).numpy())
                 
-                # 如果不是第一个生成步骤，存储当前步骤对前一个步骤生成token的注意力
+                
                 if i > 1: #从第3个生成步骤开始
-                    # 对前一个生成token的注意力是倒数第二个位置的注意力（倒数第一是自注意力）
+                    
                     last_tokens_attention.append(last_token_attention.detach().clone().cpu().to(torch.float32).numpy())
 
 
-            # 添加最后2步的注意力值并全部设为1
+            
             last_tokens_attention.extend([np.ones((num_layers,num_layers)),np.ones((num_layers,num_layers))])
             last_tokens_attention = np.array(last_tokens_attention)
             last_tokens_attention = last_tokens_attention.transpose((1,2,0)) #将生成步数放在最后一个维度
@@ -444,16 +434,16 @@ for samples,sample_type in zip([positive_samples,negative_samples],['positive','
             joint_attentions =[]
             for pair in all_attentions:
                 token = pair[0]
-                res_att_mat = pair[1].max(axis=1) #取最大注意力头的权重，得到一个 [layer=28, seq_len=输入长度或者1, seq_len=输入长度或者输入长度+生成步数]
+                res_att_mat = pair[1].max(axis=1) 
                 bias_vector = np.ones(pair[1].shape[-1])
                 bias_vector = bias_vector[None, None, :]
-                res_att_mat = res_att_mat + bias_vector #对[layers,1,seq_len]做残差连接
-                res_att_mat = rmsnorm(torch.tensor(res_att_mat), eps=eps).numpy() #RMSNorm归一化
+                res_att_mat = res_att_mat + bias_vector #对[layers,1,seq_len]
+                res_att_mat = rmsnorm(torch.tensor(res_att_mat), eps=eps).numpy() 
                 joint_att = np.zeros(res_att_mat.shape)
                 layers = joint_att.shape[0]
                 joint_att[0] = res_att_mat[0]
                 for i in np.arange(1, layers):
-                    joint_att[i] = res_att_mat[i] * joint_att[i-1]  #逐元素相乘,因为原文中的公式是用于计算注意力方阵的[seq_len,seq_len]，但是这里用于计算注意力向量[1,seq_len]，所以需要逐元素相乘
+                    joint_att[i] = res_att_mat[i] * joint_att[i-1]
                 joint_attentions.append((token,joint_att))
             final_result = {'response':response,
                             'response_ids':response_ids,
