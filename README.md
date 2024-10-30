@@ -3,7 +3,7 @@
 This is a temporary repo for the demo codes
 
 ## Currently include implements
-llama3-8B-Chinese-Chat, Qwen2-7B-Instruct and glm-4-9b-chat (require copy special tweaks,see notebook)
+LLAMA3-8B-Chinese-Chat, QWEN2-7B-Instruct and GLM-4-9b-chat (require  special tweaks,see notebook)
 
 
 ## Usage
