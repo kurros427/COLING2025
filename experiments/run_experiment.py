@@ -46,5 +46,5 @@ def restart_kernel():
         os.execv(sys.executable, ['python'] + sys.argv)
 
 if __name__ == "__main__":
-    script_to_monitor = "run_llama.py"  # 替换为你的目标脚本路径
+    script_to_monitor = "llama.py"  # 替换为你的目标脚本路径
     run_script(script_to_monitor)
